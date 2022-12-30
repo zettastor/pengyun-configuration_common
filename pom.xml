@@ -1,0 +1,37 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <artifactId>lib-root</artifactId>
+    <groupId>com.pengyun.lib</groupId>
+    <version>1.0.0-OS-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>pengyun-configuration_common</artifactId>
+  <version>1.0.0-OS-SNAPSHOT</version>
+
+  <build>
+    <plugins>
+      <plugin>
+        <artifactId>maven-remote-resources-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>bundle</goal>
+            </goals>
+            <configuration>
+              <includes>
+                <include>**/*.properties</include>
+                <include>**/*.so</include>
+                <include>**/*.pl</include>
+                <include>**/*.pm</include>
+              </includes>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>

@@ -1,0 +1,151 @@
+#!/usr/bin/perl
+# this scripts is as one part of ZettaStor system configuration files 
+# normally this file put to directory /etc of all system nodes
+#
+# ----history-----
+# 20151100 - zhoujiangming - first version
+# 20151200 - mahaiqing     - add some print information
+# 20160130 - liuxin - fix the bugs
+# 20160217 - mahaiqing - change the service starting order(dd, zookeeper, nbd, iscsi)
+# 20160218 - mahaiqing - add sleep 10 to make the dd port could be displayed
+# 20160623 - mahaiqing - chang py_nbd to pyd, which we are using now 
+# 20170331 - wonder - add function monitor_zookeeper();
+#
+use File::Spec;
+
+use constant DIR_DEPLOYMENT_DAEMON          => "/var/deployment_daemon/packages/pengyun-deployment_daemon";
+use constant LAUNCHER_DEPLOYMENT_DAEMON     => "bin/startup.sh";
+
+use constant ZOOKEEPER_DIR                  => "/opt/zookeeper";
+use constant ZOOKEEPER_CONF                 => File::Spec->catfile(ZOOKEEPER_DIR, "zookeeper.cfg");
+use constant ZOOKEEPER_CONF_TARGET          => File::Spec->catfile(ZOOKEEPER_DIR, "zookeeper-3.4.6/conf/zoo.cfg");
+use constant ZOOKEEPER_SCRIPT		    => File::Spec->catfile(ZOOKEEPER_DIR, "zookeeper-3.4.6/bin/zkServer.sh");
+use constant ZOOKEEPER_START_CMD            => "@{[ZOOKEEPER_SCRIPT]} start";
+use constant ZOOKEEPER_STOP_CMD             => "@{[ZOOKEEPER_SCRIPT]} stop";
+use constant ZOOKEEPER_DATA                 => "@{[ZOOKEEPER_DIR]}/data/version-2";
+use constant ZOOKEEPER_LOGS                 => "@{[ZOOKEEPER_DIR]}/logs/version-2";
+use constant ZOOKEEPER_PID                  => "@{[ZOOKEEPER_DIR]}/data/zookeeper_server.pid";
+
+
+use constant LAUNCHER_ISCSITARGET_V1        => "/etc/init.d/iscsitarget";
+use constant LAUNCHER_ISCSITARGET_V2        => "/etc/init.d/iscsi-target";
+
+my $date = localtime();
+print "\n------------make the configuration for ZettaStor system : Started, time: $date ----------\n";
+start_deployment_daemon();
+start_zookeeper();
+monitor_zookeeper();
+insmod_pyd();
+start_iscsi_target();
+$date = localtime();
+print "\ntime: $date\n";
+sleep(10);
+print "the results of command netstat are as follows: \n";
+system('netstat -npl | grep "\bLISTEN\b" ');
+
+$date = localtime();
+
+print "\n============This storectl version latest refreshed date is on 20160623 ===============\n";
+
+print "\n------------make the configuration for ZettaStor system : Finished, time: $date ----------\n";
+
+sub start_deployment_daemon {
+    print ">>> start deployment_daemon ...\n";
+
+    if (not -e DIR_DEPLOYMENT_DAEMON) {
+        print "No working directory for deployment_daemon: @{[DIR_DEPLOYMENT_DAEMON]}\n";
+        return;
+    }
+    if (not -e File::Spec->catfile(DIR_DEPLOYMENT_DAEMON, LAUNCHER_DEPLOYMENT_DAEMON)) {
+        print "No launcher for deployment_daemon: @{[LAUNCHER_DEPLOYMENT_DAEMON]}\n";
+        return;
+    }
+
+    chdir(DIR_DEPLOYMENT_DAEMON);
+    system("@{[LAUNCHER_DEPLOYMENT_DAEMON]} &");
+    print ">>> start deployment_daemon ...Finished\n";
+}
+
+sub start_zookeeper {
+    print ">>> start zookeeper ...\n";
+
+    if (not -e ZOOKEEPER_DIR) {
+        print "No working directory for zookeeper: @{[ZOOKEEPER_DIR]}\n";
+        return;
+    }
+
+    print "first stop the zookeeper, cmd: @{[ZOOKEEPER_STOP_CMD]}\n";
+    system(ZOOKEEPER_STOP_CMD);
+
+    print "clear zookeeper data: @{[ZOOKEEPER_DATA]}\n";
+    if ( -d ZOOKEEPER_DATA) {
+     	print "clear zookeeper data: @{[ZOOKEEPER_DATA]}\n";
+        system("rm -rf @{[ZOOKEEPER_DATA]}");
+    }
+
+    print "clear zookeeper logs: @{[ZOOKEEPER_LOGS]}\n";
+    if ( -d ZOOKEEPER_LOGS) {
+     	print "clear zookeeper logs: @{[ZOOKEEPER_LOGS]}\n";
+	system("rm -rf @{[ZOOKEEPER_LOGS]}");
+    }
+     
+    print "remove zookeeper pid file: @{[ZOOKEEPER_PID]}\n";
+    if ( -e ZOOKEEPER_PID) {
+     	print "remove zookeeper pid file: @{[ZOOKEEPER_PID]}\n";
+	system("rm -rf @{[ZOOKEEPER_PID]}");
+    }
+
+    print "move config file: @{[ZOOKEEPER_CONF]} to @{[ZOOKEEPER_CONF_TARGET]}\n";
+    system("cp -f @{[ZOOKEEPER_CONF]} @{[ZOOKEEPER_CONF_TARGET]}"); 
+    print ">>> start zookeeper ...begin, cmd: @{[ZOOKEEPER_START_CMD]}\n";
+    system(ZOOKEEPER_START_CMD);
+    print ">>> start zookeeper ...end\n";
+}
+
+sub insmod_pyd {
+    print ">>> install module pyd ...\n";
+    $OS=`uname -r`;
+    $DIR_PYD="/lib/modules/".$OS;
+    chomp($DIR_PYD);
+    $DIR_PYD=$DIR_PYD."/extra/pyd/pyd.ko";
+
+    if (not -e $DIR_PYD) {
+        print "No such ko: $DIR_PYD\n";
+        return;
+    }
+
+    system("rmmod nbd");
+    system("rmmod py_nbd");
+    system("rmmod pyd");
+
+    system("insmod $DIR_PYD);
+    system("depmod -a");
+    system("lsmod  | grep pyd ");
+    print ">>> install module pyd ...Finished\n";
+}
+
+sub start_iscsi_target {
+    print ">>> start iscsi target ...\n";
+
+    if (-e LAUNCHER_ISCSITARGET_V1) {
+        print "Start iscsi target with launcher @{[LAUNCHER_ISCSITARGET_V1]}\n";
+        system("@{[LAUNCHER_ISCSITARGET_V1]} start");
+		print ">>> start iscsi target ...Finished\n";
+        return;
+    }
+
+    if (-e LAUNCHER_ISCSITARGET_V2) {
+        print "Start iscsi target with launcher @{[LAUNCHER_ISCSITARGET_V2]}\n";
+        system("@{[LAUNCHER_ISCSITARGET_V2]} start");
+		print ">>> start iscsi target ...Finished\n";
+        return;
+    }
+
+    print "No launcher for iscsi target\n";
+}
+
+sub monitor_zookeeper{
+
+	system('grep pengyun-zkMonitor -q /var/spool/cron/root  && exit || echo "*/1 * * * *  /usr/bin/perl /etc/init.d/pengyun-zkMonitor">> /var/spool/cron/root');
+
+}
